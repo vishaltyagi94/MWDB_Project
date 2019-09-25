@@ -101,6 +101,8 @@ class imageProcess:
                 j = j + 100
 
         local_binary_pattern = [x for y in local_binary_pattern for x in y]
+        local_binary_pattern = np.asarray(local_binary_pattern, dtype=float).tolist()
+
         return local_binary_pattern
 
     """
@@ -186,12 +188,16 @@ class imageProcess:
             recs = self.dbFetch(conn,model)
             recs_flt = []
             # Flatten the data structure and 
-            if model == 'm' or model == 'l' or model == 'h':
+            if model == 'm':
+                print(recs)
                 for rec in recs:
                     recs_flt.append((rec[0], [float(x) for y in rec[1] for x in y]))
             elif model == 's':
                 for rec in recs:
                     recs_flt.append((rec[0], [[float(x) for x in y] for y in rec[1]]))
+            elif model == 'l' or model == 'h':
+                for rec in recs:
+                    recs_flt.append((rec[0], [float(x) for x in rec[1]]))
             return recs_flt
 
     # Method to calculate the Cosine Similarity
