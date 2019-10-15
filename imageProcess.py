@@ -16,9 +16,9 @@ import os
 import cv2
 from skimage import feature
 from skimage.transform import downscale_local_mean
-
+import csv
 class imageProcess:
-    def __init__(self, dirpath, ext='*.jpg'):
+    def __init__(self, dirpath='C:\\Users\\pylak\\Documents\\Fall 2019\\MWDB\\Project\\Phase1\\Hands_test2\\', ext='*.jpg'):
         self.dirpath = dirpath
         self.ext = ext
 
@@ -157,7 +157,7 @@ class imageProcess:
             pbar.update(1)
 
     # Method to fetch data from Database
-    def dbFetch(self, conn, model):
+    def dbFetch(self, conn, model, db=''):
         # Create cursor
         cur = conn.cursor()
         if model == 's':
@@ -168,6 +168,8 @@ class imageProcess:
             dbname = 'imagedata_hog'
         elif model == 'l':
             dbname = 'imagedata_lbp'
+        elif db != '':
+            dbname = db
 
         sql = "SELECT * FROM {db}".format(db=dbname)
         cur.execute(sql)
@@ -181,15 +183,16 @@ class imageProcess:
         db = PostgresDB(password=password, host=host,
                         database=database, user=user, port=port)
         conn = db.connect()
+        # Save Features
         if process == 's':
             self.dbSave(conn, model)
             print('Data saved successfully to the Database!')
+
         elif process == 'f':
             recs = self.dbFetch(conn,model)
             recs_flt = []
             # Flatten the data structure and 
             if model == 'm':
-                print(recs)
                 for rec in recs:
                     recs_flt.append((rec[0], [float(x) for y in rec[1] for x in y]))
             elif model == 's':
@@ -281,3 +284,48 @@ class imageProcess:
     def writeFile(self, content, path):
         with open(path, 'w') as file:
             file.write(str(content))
+
+    # Method to read the Metadata
+    def readMetaData(self, filepath='C:\\Users\\pylak\\Documents\\Fall 2019\\MWDB\\Project\\Phase1\\HandInfo.csv'):
+        with open(filepath, 'r') as file:
+            csv_reader = csv.reader(file)
+            meta_file = []
+            for idx, row in enumerate(csv_reader):
+                if idx == 0:
+                    continue
+                sub_id = row[0]
+                id = row[7].split('.')[0]
+                gender = row[2]
+                orientation = row[6].split(' ')
+                accessories = row[4]
+                meta_file.append([sub_id, id, gender, orientation[0], orientation[1], accessories])
+            return meta_file
+
+    # Convert list to string
+    def list2string(self, lst):
+        values_st = str(lst).replace('[[', '(')
+        values_st = values_st.replace('[', '(')
+        values_st = values_st.replace(']]', ']')
+        values_st = values_st.replace(']', ')')
+        return values_st
+
+    # Method to create and insert the Metadata to the database
+    def createInsertMeta(self, conn):
+        # Read the metadata file
+        metafile = self.readMetaData()
+        # Create cursor
+        cur = conn.cursor()
+        # Create the meta table
+        sqlc = "CREATE TABLE IF NOT EXISTS " \
+               "img_meta(subjectid TEXT, image_id TEXT, gender TEXT, aspect TEXT, orient TEXT, accessories TEXT)"
+        cur.execute(sqlc)
+        conn.commit()
+        # Insert the meta data into the database table
+        values_st = self.list2string(metafile)
+        sqli = "INSERT INTO img_meta VALUES {x}".format(x=values_st)
+        cur.execute(sqli)
+        conn.commit()
+        print('Meta Data saved into Database!')
+        cur.close()
+
+
