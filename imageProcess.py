@@ -137,7 +137,7 @@ class imageProcess:
                 dbname = 'imagedata_hog'
             elif model == 'l':
                 lbp_val = self.lbp_preprocess(filename)
-                values_st = str(lbp_val.tolist()).replace('[', '{')
+                values_st = str(lbp_val).replace('[', '{')
                 values_st = values_st.replace(']', '}')
                 dbname = 'imagedata_lbp'
             else:
