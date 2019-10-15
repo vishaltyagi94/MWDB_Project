@@ -9,7 +9,7 @@ if arg == '1':
 elif arg == '2':
     inp1 = input("Would you like to fetch SIFT features or Moment features (s/m)?")
     inp = input("Provide the image ID which you would like to display:")
-    rec = ip.dbProcess(password='1Idontunderstand', model=inp1, all='n', imgid=inp, process='f')
+    rec = ip.dbProcess(password='1Idontunderstand', model=inp1, process='f')
     rec_arr = np.array(rec[0][1])
     print('Features:', np.array(rec_arr))
     print('Size', rec_arr.shape)

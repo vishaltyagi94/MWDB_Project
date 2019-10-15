@@ -148,7 +148,7 @@ class dimReduction(imageProcess):
     # Function to save the reduced dimensions to database
     def saveDim(self, feature, model, dbase, k, password='1Idontunderstand',
                 host='localhost', database='postgres',
-                user='postgres', port=5432, meta=False, sub=True):
+                user='postgres', port=5432, meta=False):
         imgs = self.dbProcess(password=password, process='f', model=feature)
         imgs_data = np.array([x[1] for x in imgs])
         imgs_meta = [x[0] for x in imgs]
@@ -156,9 +156,7 @@ class dimReduction(imageProcess):
         db = PostgresDB(password=password, host=host,
                         database=database, user=user, port=port)
         conn = db.connect()
-        if sub == True:
-            self.binMat(conn, 'imagedata_m_pca')
-            exit()
+
         if meta == True:
             self.createInsertMeta(conn)
             exit()
@@ -182,5 +180,3 @@ class dimReduction(imageProcess):
         self.createInsertDB(dbase, imgs_red, conn)
         return imgs_sort, feature_sort
 
-dim = dimReduction('C:\\Users\\pylak\\Documents\\Fall 2019\\MWDB\\Project\\Phase1\\Hands_test2\\', '*.jpg')
-dim.saveDim('l','pca','imagedata_m_pca',10)
