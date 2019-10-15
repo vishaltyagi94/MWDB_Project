@@ -1,24 +1,30 @@
 """
 Authors: Kovid, Tharun, Vishal, Anh, Dhriti, Rinku
-Last Edited By: Kovid
-Last Edited On: 9/22/2019
+Last Edited By: Vishal
+Last Edited On: 10/14/2019
 Class Description: Class to Extract Features from images
 """
+import csv
+import glob
+import os
+
+import cv2
+import matplotlib.image as mpimg
 # Import statements
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-import glob
 import numpy as np
-from scipy.stats import skew
-from PostgresDB import PostgresDB
 import tqdm
-import os
-import cv2
+from scipy.stats import skew
 from skimage import feature
 from skimage.transform import downscale_local_mean
-import csv
+
+from PostgresDB import PostgresDB
+
+
 class imageProcess:
-    def __init__(self, dirpath='C:\\Users\\pylak\\Documents\\Fall 2019\\MWDB\\Project\\Phase1\\Hands_test2\\', ext='*.jpg'):
+    def __init__(self,
+                 dirpath='C:\\ASU\\Fall 2019\\MWDB\\Project\\Phase 1\\Dataset\\CSE 515 Fall19 - Smaller Dataset\\',
+                 ext='*.jpg'):
         self.dirpath = dirpath
         self.ext = ext
 
@@ -137,7 +143,7 @@ class imageProcess:
                 dbname = 'imagedata_hog'
             elif model == 'l':
                 lbp_val = self.lbp_preprocess(filename)
-                values_st = str(lbp_val.tolist()).replace('[', '{')
+                values_st = str(lbp_val).replace('[', '{')
                 values_st = values_st.replace(']', '}')
                 dbname = 'imagedata_lbp'
             else:
@@ -147,7 +153,7 @@ class imageProcess:
             name = os.path.splitext(name)[0]
             # create a cursor
             cur = conn.cursor()
-            sql = "INSERT INTO {db} VALUES('{x}', '{y}');".format(x=name,
+            sql = "INSERT INTO {db} VALUES('{x}', '{y}');".format(x=str(name),
                                                                   y=values_st,
                                                                   db=dbname)
             cur.execute(sql)
@@ -178,7 +184,7 @@ class imageProcess:
 
     # Method to access the database
     def dbProcess(self, password, process='s', model='s', host='localhost',
-                  database='postgres', user='postgres', port=5432):
+                  database='mwdb_project', user='postgres', port=5432):
         # Connect to the database
         db = PostgresDB(password=password, host=host,
                         database=database, user=user, port=port)
