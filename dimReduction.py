@@ -88,10 +88,67 @@ class dimReduction(imageProcess):
         cur.close()
         print('Reduced Features saved successfully to Table {x}'.format(x=dbase))
 
+    def simMetric(self, d1, d2):
+        return 1 / (1 + self.l2Dist(d1, d2))
+
+    # Function to create subject id matrix
+    def subMatrix(self, conn, dbname, mat=True):
+        # Read from the database and join with Meta data
+        cur = conn.cursor()
+        sqlj = "SELECT t2.subjectid, ARRAY_AGG(t1.imageid), ARRAY_AGG(t1.imagedata) FROM {db} " \
+               "t1 INNER JOIN img_meta t2 ON t1.imageid = t2.image_id GROUP BY t2.subjectid".format(db=dbname)
+        cur.execute(sqlj)
+        subjects = cur.fetchall()
+        sub_dict = {x: np.mean(np.array(y,dtype=float), axis=0) for x,z,y in subjects}
+        sub_sim = {x:'' for x in sub_dict.keys()}
+        sub_mat = []
+        for x in sub_dict.keys():
+            sub_sim[x] = sorted([(el, self.simMetric(sub_dict[x], sub_dict[el])) for el in sub_dict.keys() if el != x], key=lambda x:x[1], reverse=True)[0:3]
+            sub_mat.append([self.simMetric(sub_dict[x], sub_dict[el]) for el in sub_dict.keys()])
+
+        if mat == False:
+            return sub_sim
+        else:
+            k = input('Please provide the number of latent semantics(k): ')
+            print(np.array(sub_mat).shape)
+            w, h = self.nmf(np.array(sub_mat), int(k))
+            img_sort = self.imgSort(h, list(sub_dict.keys()))
+        print(np.array(img_sort))
+
+    def binMat(self, conn, dbname):
+        # Read from the database and join with Meta data
+        cur = conn.cursor()
+        sqlj = "SELECT t1.imageid, CASE WHEN t2.orient = 'left' THEN 1 ELSE 0 END , " \
+               "CASE WHEN t2.orient = 'right' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.aspect = 'dorsal' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.aspect = 'palmar' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.accessories = '1' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.accessories = '0' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.gender = 'male' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.gender = 'female' THEN 1 ELSE 0 END" \
+               " FROM {db} " \
+               "t1 INNER JOIN img_meta t2 ON t1.imageid = t2.image_id".format(db=dbname)
+        cur.execute(sqlj)
+        subjects = cur.fetchall()
+        img_meta = []
+        bin_mat = []
+        for x in subjects:
+            img_meta.append(x[0])
+            bin_mat.append(x[1:])
+        k = input('Please provide the number of latent semantics(k): ')
+        w, h = self.nmf(np.array(bin_mat).T, int(k))
+        img_sort = self.imgSort(h, img_meta)
+        features = ['left', 'right', 'dorsal', 'palmar', 'acessories', 'no_accessories', 'male', 'female']
+        feature_sort = [np.argsort(x)[::-1] for x in w.T]
+        feat_ls = []
+        for idx, x in enumerate(feature_sort):
+            feat_ls.append([(features[i], w.T[idx][i]) for i in x])
+        return img_sort, feat_ls
+
     # Function to save the reduced dimensions to database
     def saveDim(self, feature, model, dbase, k, password='1Idontunderstand',
                 host='localhost', database='postgres',
-                user='postgres', port=5432, meta=False):
+                user='postgres', port=5432, meta=False, sub=True):
         imgs = self.dbProcess(password=password, process='f', model=feature)
         imgs_data = np.array([x[1] for x in imgs])
         imgs_meta = [x[0] for x in imgs]
@@ -99,9 +156,12 @@ class dimReduction(imageProcess):
         db = PostgresDB(password=password, host=host,
                         database=database, user=user, port=port)
         conn = db.connect()
+        if sub == True:
+            self.binMat(conn, 'imagedata_m_pca')
+            exit()
         if meta == True:
             self.createInsertMeta(conn)
-
+            exit()
         if model == 'nmf':
             w, h = self.nmf(imgs_data.T, k)
             imgs_red = np.dot(imgs_data, w).tolist()
@@ -122,4 +182,5 @@ class dimReduction(imageProcess):
         self.createInsertDB(dbase, imgs_red, conn)
         return imgs_sort, feature_sort
 
-
+dim = dimReduction('C:\\Users\\pylak\\Documents\\Fall 2019\\MWDB\\Project\\Phase1\\Hands_test2\\', '*.jpg')
+dim.saveDim('l','pca','imagedata_m_pca',10)
