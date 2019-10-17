@@ -17,14 +17,11 @@ import tqdm
 from scipy.stats import skew
 from skimage import feature
 from skimage.transform import downscale_local_mean
-
-from PostgresDB import PostgresDB
-
+import csv
 
 class imageProcess:
-    def __init__(self,
-                 dirpath='C:\\ASU\\Fall 2019\\MWDB\\Project\\Phase 1\\Dataset\\CSE 515 Fall19 - Smaller Dataset\\',
-                 ext='*.jpg'):
+    def __init__(self, dirpath='C:\\Users\\pylak\\Documents\\Fall 2019\\MWDB\\Project\\Phase1\\Hands_test2\\', ext='*.jpg'):
+
         self.dirpath = dirpath
         self.ext = ext
 

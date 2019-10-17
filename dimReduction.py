@@ -6,6 +6,7 @@ from sklearn.decomposition import NMF
 from sklearn.preprocessing import StandardScaler
 import numpy as np
 from scipy.sparse.linalg import svds
+from sklearn import svm
 
 class dimReduction(imageProcess):
     def __init__(self, dirpath, ext='*.jpg'):
@@ -88,20 +89,81 @@ class dimReduction(imageProcess):
         cur.close()
         print('Reduced Features saved successfully to Table {x}'.format(x=dbase))
 
+    def simMetric(self, d1, d2):
+        return 1 / (1 + self.l2Dist(d1, d2))
+
+    # Function to create subject id matrix
+    def subMatrix(self, conn, dbname, mat=True):
+        # Read from the database and join with Meta data
+        cur = conn.cursor()
+        sqlj = "SELECT t2.subjectid, ARRAY_AGG(t1.imageid), ARRAY_AGG(t1.imagedata) FROM {db} " \
+               "t1 INNER JOIN img_meta t2 ON t1.imageid = t2.image_id GROUP BY t2.subjectid".format(db=dbname)
+        cur.execute(sqlj)
+        subjects = cur.fetchall()
+        sub_dict = {x: np.mean(np.array(y,dtype=float), axis=0) for x,z,y in subjects}
+        sub_sim = {x:'' for x in sub_dict.keys()}
+        sub_mat = []
+        for x in sub_dict.keys():
+            sub_sim[x] = sorted([(el, self.simMetric(sub_dict[x], sub_dict[el])) for el in sub_dict.keys() if el != x], key=lambda x:x[1], reverse=True)[0:3]
+            sub_mat.append([self.simMetric(sub_dict[x], sub_dict[el]) for el in sub_dict.keys()])
+
+        if mat == False:
+            return sub_sim
+        else:
+            k = input('Please provide the number of latent semantics(k): ')
+            w, h = self.nmf(np.array(sub_mat), int(k))
+            img_sort = self.imgSort(h, list(sub_dict.keys()))
+        return np.array(img_sort)
+
+    def binMat(self, conn, dbname):
+        # Read from the database and join with Meta data
+        cur = conn.cursor()
+        sqlj = "SELECT t1.imageid, CASE WHEN t2.orient = 'left' THEN 1 ELSE 0 END , " \
+               "CASE WHEN t2.orient = 'right' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.aspect = 'dorsal' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.aspect = 'palmar' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.accessories = '1' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.accessories = '0' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.gender = 'male' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.gender = 'female' THEN 1 ELSE 0 END" \
+               " FROM {db} " \
+               "t1 INNER JOIN img_meta t2 ON t1.imageid = t2.image_id".format(db=dbname)
+        cur.execute(sqlj)
+        subjects = cur.fetchall()
+        img_meta = []
+        bin_mat = []
+        for x in subjects:
+            img_meta.append(x[0])
+            bin_mat.append(x[1:])
+        k = input('Please provide the number of latent semantics(k): ')
+        w, h = self.nmf(np.array(bin_mat).T, int(k))
+        img_sort = self.imgSort(h, img_meta)
+        features = ['left', 'right', 'dorsal', 'palmar', 'acessories', 'no_accessories', 'male', 'female']
+        feature_sort = [np.argsort(x)[::-1] for x in w.T]
+        feat_ls = []
+        for idx, x in enumerate(feature_sort):
+            feat_ls.append([(features[i], w.T[idx][i]) for i in x])
+        return img_sort, feat_ls
+
+    
     # Function to save the reduced dimensions to database
     def saveDim(self, feature, model, dbase, k, password='1Idontunderstand',
                 host='localhost', database='postgres',
                 user='postgres', port=5432, meta=False):
+
+
+        db = PostgresDB(password=password, host=host,
+                        database=database, user=user, port=port)
+        conn = db.connect()
         imgs = self.dbProcess(password=password, process='f', model=feature)
         imgs_data = np.array([x[1] for x in imgs])
         imgs_meta = [x[0] for x in imgs]
         imgs_zip = list(zip(imgs_meta, imgs_data))
-        db = PostgresDB(password=password, host=host,
-                        database=database, user=user, port=port)
-        conn = db.connect()
+
         if meta == True:
             self.createInsertMeta(conn)
-
+            exit()
+            
         if model == 'nmf':
             w, h = self.nmf(imgs_data.T, k)
             imgs_red = np.dot(imgs_data, w).tolist()
@@ -122,4 +184,64 @@ class dimReduction(imageProcess):
         self.createInsertDB(dbase, imgs_red, conn)
         return imgs_sort, feature_sort
 
+      
+    # Classify images based on label
+    def classifyImg(self, conn, feature, img, label, dim):
+        # fetch image dataset
+        if feature == 'm':
+            db_feature = 'imagedata_moments'
+        elif feature == 's':
+            db_feature = 'imagedata_sift'
+        elif feature == 'h':
+            db_feature = 'imagedata_hog'
+        elif feature == 'l':
+            db_feature = 'imagedata_lbp'
+
+        # Fetch the data for a particular label
+        if label in ['left', 'right']:
+            field = 'orient'
+        elif label in ['dorsal', 'palmar']:
+            field = 'aspect'
+        elif label in ['0', '1']:
+            field = 'accessories'
+        elif label in ['male', 'female']:
+            field = 'gender'
+        cur = conn.cursor()
+        sqlj = "SELECT t1.imageid, t1.data FROM {db} t1 INNER JOIN img_meta t2 " \
+               "ON t1.imageid = t2.image_id WHERE t2.{field} = '{label}'".format(db=db_feature, field=field, label=label)
+        cur.execute(sqlj)
+        label_data = cur.fetchall()
+        sqlf = "SELECT t1.data FROM {db} t1 where t1.imageid = '{img}'".format(db=db_feature, img=img)
+        cur.execute(sqlf)
+        image = cur.fetchall()[0][0]
+        if feature == 'm':
+            image = [float(x) for y in image for x in y]
+        else:
+            image = [float(x) for x in image]
+        recs_flt = []
+        img_meta = []
+        if feature == 'm':
+            for rec in label_data:
+                recs_flt.append([float(x) for y in rec[1] for x in y])
+                img_meta.append(rec[0])
+        else:
+            for rec in label_data:
+                recs_flt.append([float(y) for y in rec[1]])
+                img_meta.append(rec[0])
+
+        u, v = self.pca(np.array(recs_flt), 10)
+        imgs_red = np.dot(recs_flt, u).tolist()
+        clf = svm.OneClassSVM(nu=0.1, kernel='rbf', gamma=0.1)
+        clf.fit(imgs_red)
+        image = np.dot(np.array(image), u)
+        pred = clf.predict([image])
+        x = clf.decision_function([image])
+        print(x)
+        print(pred)
+        print(img_meta)
+        print('test image', sum(image))
+        print('label images:', sorted([sum(x) for x in imgs_red]))
+        centroid = np.mean(imgs_red, axis=0)
+        print('label distance from centroid:',sorted([self.l2Dist(centroid, i) for i in imgs_red], reverse=True))
+        print('image:', self.l2Dist(centroid, image))
 
