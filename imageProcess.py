@@ -20,17 +20,23 @@ from scipy.linalg import svd
 from scipy.sparse.linalg import svds
 # import time
 import math
-from sklearn.cluster import MiniBatchKMeans
+import joblib
 
 # Task 3 4 5
 import csv
+import matplotlib.pyplot as plt
+import copy
+import os
 
 DATABASE_NAME = 'mwdb'
 TABLE_NAME = 'images_demo'
-PASSWORD = "abcdef"
-dirpath='/home/anhnguyen/ASU/CSE-515/Project/Phase 1/Project - Phase 2/Data/testset1/'
-ext='*.jpg'
-csvFile = "/home/anhnguyen/ASU/CSE-515/Project/Phase 2/Project - Phase 2/"
+PASSWORD = "mynhandepg"
+# dirpath='/home/anhnguyen/ASU/CSE-515/Project/Phase 1/Project - Phase 2/Data/testset1/'
+# ext='*.jpg'
+csvFile = "/home/anhnguyen/ASU/CSE-515/Project/Phase 2/Project - Phase 2/HandInfo.csv"
+
+
+
 
 class imageProcess:
     def __init__(self, dirpath, ext='*.jpg'):
@@ -122,10 +128,10 @@ class imageProcess:
 
     """
     Method to Save feature data to Postgres Database
-    1. Sift: imagedata_sift(imageid, data)
-    2. Moments: imagedata_moments(imageid, data)
-    3. Hog: imagedata_hog(imageid, data)
-    4. LBP: imagedata_lbp(imageid, data)    
+    1. Sift: imagedata_s(imageid, data)
+    2. Moments: imagedata_m(imageid, data)
+    3. Hog: imagedata_h(imageid, data)
+    4. LBP: imagedata_l(imageid, data)    
     """
     def dbSave(self, conn, model):
         # Count the number of files in the directory
@@ -137,34 +143,53 @@ class imageProcess:
                 pixels, size = self.fetchImagesAsPix(filename)
                 momments = self.imageMoments(pixels, size)
                 # Convert to string to insert into DB as an array
-                values_st = str(momments).replace('[', '{')
-                values_st = values_st.replace(']', '}')
-                dbname = 'imagedata_moments'
+                values_st = str(np.asarray(momments).tolist())
+                # values_st = str(momments).replace('[', '{')
+                # values_st = values_st.replace(']', '}')
+                dbname = 'imagedata_m'
             elif model == 's':
                 des = self.sift_features(filename)
-                values_st = str(des.tolist()).replace('[', '{')
-                values_st = values_st.replace(']', '}')
-                dbname = 'imagedata_sift'
+                values_st = str(np.asarray(des).tolist())
+                # values_st = str(des.tolist()).replace('[', '{')
+                # values_st = values_st.replace(']', '}')
+                dbname = 'imagedata_s'
             elif model == 'h':
                 h_val = self.hog_process(filename)
-                values_st = str(h_val.tolist()).replace('[', '{')
-                values_st = values_st.replace(']', '}')
-                dbname = 'imagedata_hog'
+                values_st = str(np.asarray(h_val).tolist())
+                # values_st = str(h_val.tolist()).replace('[', '{')
+                # values_st = values_st.replace(']', '}')
+                dbname = 'imagedata_h'
             elif model == 'l':
                 lbp_val = self.lbp_preprocess(filename)
-                values_st = str(lbp_val.tolist()).replace('[', '{')
-                values_st = values_st.replace(']', '}')
-                dbname = 'imagedata_lbp'
+                values_st = str(np.asarray(lbpdbase_val).tolist())
+                # values_st = str(lbp_val.tolist()).replace('[', '{')
+                # values_st = values_st.replace(']', '}')
+                dbname = 'imagedata_l'
             else:
                 print('Incorrect value for Model provided')
                 exit()
+            sql = "CREATE TABLE IF NOT EXISTS {db} (imageid TEXT NOT NULL, imagedata TEXT, PRIMARY KEY (imageid))".format(db=dbname)
+            cur = conn.cursor()
+            cur.execute(sql)
             name = os.path.basename(filename)
             name = os.path.splitext(name)[0]
             # create a cursor
-            cur = conn.cursor()
-            sql = "INSERT INTO {db} VALUES('{x}', '{y}');".format(x=name,
-                                                                  y=values_st,
-                                                                  db=dbname)
+            sql = "SELECT {field} FROM {db} WHERE {field} = '{condition}';".format(field="imageid",db=dbname,condition=name)
+            # print("SQL Check Exist - HOG: ", sql)
+            cur.execute(sql)
+
+            # cur.execute(sql)
+            if cur.fetchone() is None:
+                print("Insert")
+                # print("Not Exist HOG - Insert")
+                sql = "INSERT INTO {db} VALUES('{x}', '{y}');".format(x=name,y=values_st, db=dbname)
+            else:
+                print("Update")
+                # print("Exist HOG - Update")
+                # column = "HOG"
+                
+                sql = "UPDATE {db} SET {x} ='{y}' WHERE IMAGEID = '{id}'".format(x=name,y=values_st, db=dbname)
+            
             cur.execute(sql)
             conn.commit()
             # close cursor
@@ -172,47 +197,53 @@ class imageProcess:
             pbar.update(1)
 
     # Method to fetch data from Database
-    def dbFetch(self, conn, model):
+    def dbFetch(self, conn, dbname, condition = ""):
         # Create cursor
         cur = conn.cursor()
-        if model == 's':
-            dbname = 'imagedata_sift'
-        elif model == 'm':
-            dbname = 'imagedata_moments'
-        elif model == 'h':
-            dbname = 'imagedata_hog'
-        elif model == 'l':
-            dbname = 'imagedata_lbp'
-
-        sql = "SELECT * FROM {db}".format(db=dbname)
+        # if model == 's':
+        #     dbname = 'imagedata_sift'
+        # elif model == 'm':
+        #     dbname = 'imagedata_moments'
+        # elif model == 'h':
+        #     dbname = 'imagedata_hog'
+        # elif model == 'l':
+        #     dbname = 'imagedata_lbp'
+        # dbname = 'imagedata_' + model
+        # if condition:
+        #     dbname += "_" + technique
+        sql = "SELECT * FROM {db} {condition}".format(db=dbname, condition = condition)
+        print (sql)
         cur.execute(sql)
         recs = cur.fetchall()
         return recs
 
     # Method to access the database
     def dbProcess(self, password, process='s', model='s', host='localhost',
-                  database='postgres', user='postgres', port=5432):
+                  database='postgres', user='postgres', port=5432, dbase = 'imagedata_l'):
         # Connect to the database
         db = PostgresDB(password=password, host=host,
-                        database=database, user=user, port=port)
+                        database=DATABASE_NAME, user=user, port=port)
         conn = db.connect()
         if process == 's':
             self.dbSave(conn, model)
             print('Data saved successfully to the Database!')
         elif process == 'f':
-            recs = self.dbFetch(conn,model)
+            recs = self.dbFetch(conn,dbase)
             recs_flt = []
             # Flatten the data structure and 
-            if model == 'm':
-                print(recs)
-                for rec in recs:
-                    recs_flt.append((rec[0], [float(x) for y in rec[1] for x in y]))
-            elif model == 's':
-                for rec in recs:
-                    recs_flt.append((rec[0], [[float(x) for x in y] for y in rec[1]]))
-            elif model == 'l' or model == 'h':
-                for rec in recs:
-                    recs_flt.append((rec[0], [float(x) for x in rec[1]]))
+            for rec in recs:
+                recs_flt.append((rec[0],np.asarray(eval(rec[1]))))
+            # if model == 'm':
+            #     print(recs)
+            #     for rec in recs:
+            #         recs_flt.append(np.asarray(eval(rec[1])))
+                    # recs_flt.append((rec[0], [float(x) for y in rec[1] for x in y]))
+            # elif model == 's':
+            #     for rec in recs:
+            #         recs_flt.append((rec[0], [[float(x) for x in y] for y in rec[1]]))
+            # elif model == 'l' or model == 'h':
+            #     for rec in recs:
+            #         recs_flt.append((rec[0], [float(x) for x in rec[1]]))
             return recs_flt
 
     # Method to calculate the Cosine Similarity
@@ -235,6 +266,12 @@ class imageProcess:
         d2 = np.array(d2, dtype=np.float32)
         dist = cv2.norm(d1, d2, cv2.NORM_L2)
         return dist
+
+    # Calculate the Euclidean distance
+    def euclidean_distance(self, imageA, imageB):
+        # d=math.sqrt(np.sum([((a-b) ** 2) for (a,b) in zip(imageA,imageB)]))
+        # return d
+        return np.sqrt(np.sum((imageA - imageB) ** 2, axis=0))
 
     # Calculate the vector matches
     def knnMatch(self, d1, d2, k=2):
@@ -269,174 +306,68 @@ class imageProcess:
                                 if rec[0] != img], key=lambda x: x[1], reverse=True)
         return sim_matrix[0:k]
 
-    # Method to display images
-    def dispImages(self, images, savepath):
-        no_images = len(images)
-        columns = 3
-        rows = no_images // columns
-        if no_images % columns != 0:
-            rows += 1
-        ax = []
-        fig = plt.figure(figsize=(20, 20))
-        fig.suptitle('Similar Images for Image {x}'.format(x=images[0]))
-        plt.axis('off')
-        for idx, i in enumerate(images):
-            img = mpimg.imread(self.dirpath + self.ext.replace('*', i))
-            ax.append(fig.add_subplot(rows, columns, idx + 1))
-            if idx == 0:
-                ax[-1].set_title("Original Image: " + i)  # set title
-            else:
-                ax[-1].set_title("Similar Image " + str(idx) + ":" + i)  # set title
-            ax[-1].axis('off')
-            plt.imshow(img)
-        plt.savefig(savepath)
-        plt.show()
 
-    # Method to write to a file
-    def writeFile(self, content, path):
-        with open(path, 'w') as file:
-            file.write(str(content))
-
-
-
-class SVDProcess:
-    def __init__(self, k, type='HOG', metrics=True):
-            self.k = k
-            self.type = type
-            self.metrics = metrics
-    
-    def svd_calc(self,image):
-            # number_of_component = 100
-            # image = np.reshape(image,(-1,14*4*9))
-            # print(image.shape)
-            [U, s, Vt] = svd(image)
-            # print(Sigma.shape)
-            # print(np.diag(Sigma).shape)
-            # S = S[:, :number_of_component]
-            # VT = VT[:n_component, :]
-            print(s.shape)
-            # Sigma = np.zeros((image.shape[0], image.shape[1]))
-            Sigma = np.diag(s)
-            # print(Sigma.shape)
-            # image = U[:,:self.k].dot(Sigma[:self.k, :self.k]).dot(V[:self.k,:])
-            # print(image.shape)
-            return [U,Sigma,Vt]
-    
-    def svd_latent(self):
-            db = PostgresDB(password = PASSWORD, database = DATABASE_NAME)
-            conn = db.connect()
-            if conn is None:
-                    print("Can not connect to database")
-                    exit()
-            cursor = conn.cursor()
-            cursor.execute("select image_id, " + self.type + " from " + TABLE_NAME)
-            data = cursor.fetchall()
-            matrix = []
-            image_id = []
-            for row in data:
-                    image_cmp = np.asarray(eval(row[1]))
-                    image_id.append(row[0])
-                    print (image_cmp.shape)
-                    if self.type != "SIFT":
-                            image_cmp = image_cmp.reshape((-1))
-                            matrix.append(image_cmp)
-                    else:
-                            matrix.extend(image_cmp)   
-                    # print (image_cmp.shape)
-                    
-            matrix = np.asarray(matrix)   
-            # print(matrix.shape)
-            if self.type == "SIFT":
-                    Kmeans = KMeans_SIFT(150)
-                    clusters = Kmeans.kmeans_process(matrix)
-                    matrix = Kmeans.newMatrixSift(data, clusters)
-                    # print (matrix)
-                    # print(matrix.shape)
-            matrix = self.svd_calc(matrix)
-            # print (matrix.shape)
-            # print (matrix)
-            # print(self.svd_calc(matrix))
-            cursor.close()
-            conn.close()
-            return matrix, image_id
-            
-
-    def svd_sim(self,image,no_images,matrix_svd, image_id):
-            
+    def similarity (self, feature, technique, dbase, k, image, label = ""):
+        db = PostgresDB(password = "mynhandepg", database = "mwdb")
+        conn = db.connect()
+        if conn is None:
+            print("Can not connect to database")
+            exit()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM " + dbase)
+        data = cursor.fetchall()
+        image_id = [rec[0] for rec in data]
         similarity = {}
-        
-        # print(image.shape)
-        matrix_image = matrix_svd[0][:,:self.k].dot(matrix_svd[1][:self.k, :self.k]).dot(matrix_svd[2][:self.k,:])
-        image_index = image_id.index(image)
-        image = matrix_image[image_index]
-        for i in range(len(image_id)):
-            image_cmp = matrix_image[i]
+        if image in image_id:
+            image_index = image_id.index(image)
+            print(image_index)
+            image_data = np.asarray(eval(data[image_index][1]))
+        else:
+            print("Not Same Label")
+            dbase = 'imagedata_' + feature + '_' + technique
+            image_data = self.dbFetch(conn,dbase, "WHERE imageid = '{0}'".format(image))
+            # cursor.execute("SELECT * FROM imagedata_{0}_{1} WHERE imageid = '{2}'".format(feature,technique,image))
+            # image_data = cursor.fetchall()
+            print(image_data)
+            image_data = np.asarray(eval(image_data[0][1]))
+            path = os.path.normpath(os.getcwd()  + os.sep + os.pardir + os.sep + 'Models'  +os.sep)
+
+            model = joblib.load(path + os.sep + "{0}_{1}.joblib".format(technique, feature))
+            image_data = model.transform(image_data)
+            similarity[image] = self.euclidean_distance(image_data,image_data)
             
-            if self.metrics:
-                    similarity[image_id[i]] = 1- cosine_similarity(image, image_cmp)
-                    # similarity[image_id[i]] = 1 - st.pearsonr(image,image_cmp)[0]
-                    # similarity[row[0]] = mean_squared_error(image,result)
-                    # similarity[row[0]] = 0 - self.psnr(image,result)
-
-            else:
-                similarity[image_id[i]] = euclidean_distance(image,image_cmp)
+        print (image_id)
+        for i in range(len(image_id)):
+            image_cmp = np.asarray(eval(data[i][1]))
+            # if self.metrics:
+            #     # similarity[row[0]] = 1- self.cosine_similarity(image, result)
+            #     similarity[image_id[i]] = 1 - st.pearsonr(image,image_cmp)[0]
+            #     # similarity[row[0]] = mean_squared_error(image,result)
+            #     # similarity[row[0]] = 0 - self.psnr(image,result)
+            # else:
+            similarity[image_id[i]] = self.euclidean_distance(image_data,image_cmp)
         similarity = sorted(similarity.items(), key = lambda x : x[1], reverse=False)
+        print(similarity)
+        self.dispImages(similarity,feature, technique, 11, k)
 
-
-        print(similarity) 
-
-        
-        dispImages(similarity, no_images + 1, self.type,self.metrics)
-            # self.showResult(similarity_cos,similarity_cos)
-
-    def svdTask1(self, matrix_SVD, image_id):
-        latent = 0
-        print ("Data Latent Sementics: " + str(latent))
-        for data_latent in matrix_SVD[0].T:
-            print ("Latent Sementics: " + str(latent))
-            result = {}
-            index = data_latent.argsort()[::-1]
-            for i in index:
-                if image_id[i] not in result:
-                    result[image_id[i]] = data_latent[i]
-            # print(result)
-            latent += 1
-
-        latent = 0
-        print ("Feature Latent Sementics: " + str(latent))
-        print(matrix_SVD[2].shape)
-        # for feature_latent in matrix_SVD[2]:
-        #     print ("Latent Sementics: " + str(latent))
-        #     result = {}
-        #     index = feature_latent.argsort()[::-1]
-        #     for i in index:
-        #         if "Feature " + str(i) not in result:
-        #             result["Feature " + str(i)] = feature_latent[i]
-        #     print(result)
-        #     latent += 1
-
-
-def dispImages(similarity , no_images, type, metric):
-    if metric:
-            metric_text = "Cosine Similarity"
-    else:
-            metric_text = "Euclidean Distance"
-    columns = 4
-    rows = no_images // columns
-    if no_images  % columns != 0:
-            rows += 1
-    ax = []
-    fig=plt.figure(figsize=(30, 20))
-    fig.canvas.set_window_title('Task 3 - Images Similarity')
-    fig.suptitle(str(no_images - 1) + ' Similar Images of ' + similarity[0][0] + ' based on ' + type + " and " + metric_text)
-    # plt.title(str(no_images - 1) + ' Similar Images of ' + similarity[0][0] + ' based on ' + type,y=-0.01)
-    plt.axis('off')
-    # fig.title(str(k) + 'Similar Images of ' + similarity[0][0] + ' based on ' + type)
-    f= open("../Outputs/task3_result.txt","w+")
-    f.write("Task 3 - Matching Score " + str(no_images) + " images with " + similarity[0][0] + ' based on ' + type + " and " + metric_text + ":\n")
-    for i in range(no_images):
+    # Method to display images
+    def dispImages(self, similarity, feature, technique, no_images, k):
+        columns = 4
+        rows = no_images // columns
+        if no_images  % columns != 0:
+                rows += 1
+        ax = []
+        fig=plt.figure(figsize=(30, 20))
+        fig.canvas.set_window_title('Task 3 - Images Similarity')
+        fig.suptitle(str(no_images - 1) + ' Similar Images of ' + similarity[0][0] + ' based on ' + feature + ", "+ str(k) + " latent semantics and " + technique)
+        # plt.title(str(no_images - 1) + ' Similar Images of ' + similarity[0][0] + ' based on ' + type,y=-0.01)
+        plt.axis('off')
+        # fig.title(str(k) + 'Similar Images of ' + similarity[0][0] + ' based on ' + type)
+        f= open("../Outputs/task3_result.txt","w+")
+        f.write("Task 2 - Matching Score " + str(no_images) + " images with " + similarity[0][0] + ' based on ' + feature + ", "+ str(k) + " latent semantics and " + technique + ":\n")
+        for i in range(no_images):
             f.write(similarity[i][0] + ": " + str(similarity[i][1]) + "\n")
-            img = mpimg.imread(dirpath + ext.replace('*', similarity[i][0]))
+            img = mpimg.imread(self.dirpath + self.ext.replace('*', similarity[i][0]))
             # create subplot and append to ax
             ax.append( fig.add_subplot(rows, columns, i+1))
             if i == 0:
@@ -445,46 +376,38 @@ def dispImages(similarity , no_images, type, metric):
                     ax[-1].set_title("Image "+str(i) + ": " +similarity[i][0] )  # set title
             ax[-1].axis('off')
             plt.imshow(img)
-    plt.savefig('../Outputs/task3_result.png')
-    f.close()
-    plt.show()
-    plt.close()
+        plt.savefig('../Outputs/task3_result.png')
+        f.close()
+        plt.show()
+        plt.close()
 
-class KMeans_SIFT:
-    def __init__(self,k):
-        self.k = k
+    # Method to write to a file
+    def writeFile(self, content, path):
+        with open(path, 'w') as file:
+            file.write(str(content))
 
-    def kmeans_process(self,matrix_image):
-        batch_size = 20 * 3
-        kmeans = MiniBatchKMeans(n_clusters=self.k, batch_size=batch_size, verbose=1).fit(matrix_image)
-        return kmeans
+    def CSV(self, label):
+        label = label.lower()
+        if label in ("dorsal", "palmar", "left", "right"):
+            index = "aspectOfHand"
+        elif label in ("male", "female"):
+            index = "gender"
+        elif label in ("with accessories", "without accessories"):
+            index = "accessories"
 
-    def newMatrixSift(self,data, kmeans):
-        kmeans.verbose = False
-        histo_list = []
-        # print("AAAAAAAAAAAA")
-        # print(data)
-        for des in data:
-                # print(des)
-                kp = np.asarray(eval(des[1]))
-                # print (kp.shape)
-                histo = np.zeros(self.k)
-                nkp = np.size(kp)
-                # print(histo)
-                # print(nkp)
-                for d in kp:
-                        idx = kmeans.predict([d])
-                        histo[idx] += 1/nkp # Because we need normalized histograms, I prefere to add 1/nkp directly
-
-                histo_list.append(histo)
-        print(np.asarray(histo_list).shape)
-        return np.asarray(histo_list)
+        with open(self.dirpath + "HandInfo.csv", 'r', newline='') as f:
+            reader = csv.reader(f, delimiter=',')
+            # next(cr) gets the header row (row[0])
+            header = next(reader)
+            i = header.index(index)
+            id = header.index("imageName")
+            print(i,index)
+            # list comprehension through remaining cr iterables
+            filteredImage = [row[id][:len(row[id]) - 4] for row in reader if row[i].find(label) != -1]
+        # print (filteredImage)
+        return filteredImage
 
 
-def euclidean_distance(imageA, imageB):
-                # d=math.sqrt(np.sum([((a-b) ** 2) for (a,b) in zip(imageA,imageB)]))
-                # return d
-                return np.sqrt(np.sum((imageA - imageB) ** 2, axis=0))
 
 def cosine_similarity(imageA, imageB):
         # print(imageA)
@@ -493,44 +416,113 @@ def cosine_similarity(imageA, imageB):
 
 
 def CSV(label):
+    label = label.lower()
+    if label in ("dorsal", "palmar", "left", "right"):
+        index = "aspectOfHand"
+    elif label in ("male", "female"):
+        index = "gender"
+    elif label in ("with accessories", "without accessories"):
+        index = "accessories"
 
-arg = input("Which task would you like to run (1/2/3)? ")
+    with open(csvFile, 'r', newline='') as f:
+        reader = csv.reader(f, delimiter=',')
+        # next(cr) gets the header row (row[0])
+        header = next(reader)
+        i = header.index(index)
+        id = header.index("imageName")
+        print(i,index)
+        # list comprehension through remaining cr iterables
+        filteredImage = [row[id][:len(row[id]) - 4] for row in reader if row[i].find(label) != -1]
+    # print (filteredImage)
+    return filteredImage
 
-featureDescriptor = input("Which feature do you want to compute - LBP or HOG: ")
-try:
-        k=int(input("K is: "))
-except ValueError:
-        print("Not an integer")
-        exit()
-if (featureDescriptor.upper() != "LBP" and featureDescriptor.upper() != "HOG" and featureDescriptor.upper() != "COLOR" and featureDescriptor.upper() != "SIFT"):
-        print("Your feature descriptor is not correct")
 
-technique = input("Which reduction techinique: ")
+# phase1 = imageProcess("/home/anhnguyen/ASU/CSE-515/Project/Phase 2/Project - Phase 2/Data/testset1/")
+# phase1.dbProcess(password = "mynhandepg", model = "l", process = "s")
+# arg = input("Which task would you like to run (1/2/3)? ")
 
-if arg == '1':
-    SVD = SVDProcess(k,featureDescriptor)
-    matrix_SVD, image_id = SVD.svd_latent()
-    SVD.svdTask1(matrix_SVD,image_id)
+# featureDescriptor = input("Which feature do you want to compute - LBP or HOG: ")
+# try:
+#         k=int(input("K is: "))
+# except ValueError:
+#         print("Not an integer")
+#         exit()
+# if (featureDescriptor.upper() != "LBP" and featureDescriptor.upper() != "HOG" and featureDescriptor.upper() != "COLOR" and featureDescriptor.upper() != "SIFT"):
+#         print("Your feature descriptor is not correct")
 
-elif arg == '2':
-    image = input("Insert the name of your image: ")
-    try:
-        k=int(input("K is: "))
-    except ValueError:
-        print("Not an integer")
-        exit()
-    try:     
-        similarityMetric = bool(int(input("Which similarity metric do you want to use - Cosine Similarity or Euclidean Distance (1/0): ")))
-    except ValueError:
-        print("Not a bool value")
-        exit()
+# technique = input("Which reduction techinique: ")
+
+# if arg == '1':
+#     SVD = SVDProcess(k,featureDescriptor)
+#     matrix_SVD, image_id = SVD.svd_latent()
+#     SVD.svdTask1(matrix_SVD,image_id)
+
+# elif arg == '2':
+#     image = input("Insert the name of your image: ")
+#     try:     
+#         similarityMetric = bool(int(input("Which similarity metric do you want to use - Cosine Similarity or Euclidean Distance (1/0): ")))
+#     except ValueError:
+#         print("Not a bool value")
+#         exit()
     
-            # imClass.processImage(image,featureDescriptor,no_images,similarityMetric)
-    SVD = SVDProcess(k,featureDescriptor,similarityMetric)
-    matrix_image, image_id = SVD.svd_latent()
-    SVD.svd_sim(image, no_images, matrix_image, image_id)
+#             # imClass.processImage(image,featureDescriptor,no_images,similarityMetric)
+#     SVD = SVDProcess(k,featureDescriptor,similarityMetric)
+#     matrix_image, image_id = SVD.svd_latent()
+#     SVD.svd_sim(image, no_images, matrix_image, image_id)
 
-elif arg == '3':
-    label = input("Which label do you want: ")
+# elif arg == '3':
+#     label = input("Which label do you want: ")
+#     filterImage = CSV(label)
+#     SVD = SVDProcess(k,featureDescriptor)
+#     matrix_SVD, image_id = SVD.svd_latent(filterImage)
+#     SVD.svdTask1(matrix_SVD,image_id)
+# elif arg == '4':
+#     label = input("Which label do you want: ")
+#     image = input("Insert the name of your image: ")
+#     try:
+#         no_images=int(input("How many similar images do you want to return: "))
+#     except ValueError:
+#         print("Not an integer")
+#         exit()
+#     try:     
+#         similarityMetric = bool(int(input("Which similarity metric do you want to use - Cosine Similarity or Euclidean Distance (1/0): ")))
+#     except ValueError:
+#         print("Not a bool value")
+#         exit()
+        
+#     filterImage = CSV(label)
+#     SVD = SVDProcess(k,featureDescriptor)
+#     matrix_image, image_id = SVD.svd_latent(filterImage)
+#     SVD.svd_sim(image, no_images, matrix_image, image_id)
+# else:
+#     SVD = SVDProcess(k,featureDescriptor)
+#     matrix = SVD.svd_latent()
+#     obj_list = []
+#     x_axis = []
+#     for i in range(20,210,20):
+#         print("Number of cluster: " + str(i))
+#         # kmeans = KMeans(k=i, max_iter = 50)
+#         # centroids, clusters = kmeans.fit(matrix)
+#         # objective = kmeans.objective_func(matrix, centroids, clusters)
+#         # Append to objective function list
+#         Kmeans = KMeans_SIFT(i)
+#         clusters, score = Kmeans.kmeans_process(matrix)
+#         obj_list.append(-score)
+#         # Create x axis
+#         x_axis.append(i)
+    
+#     plt.plot(x_axis, obj_list)
+#     plt.xlabel('Number of Clusters')
+#     plt.ylabel('Objective Function Value')
+#     #plt.savefig('graph.png')
+#     plt.title('SIFT and Kmeans Error')
+#     plt.show()
 
 
+
+
+
+
+
+#https://stackoverflow.com/questions/28836781/reading-column-names-alone-in-a-csv-file
+#https://stackoverflow.com/questions/19775692/use-and-meaning-of-in-in-an-if-statement
