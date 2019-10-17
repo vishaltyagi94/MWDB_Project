@@ -20,6 +20,16 @@ class dimReduction(imageProcess):
         H = model.components_
 
         return W, H
+
+    # Function to fetch Reduced dimensions from image
+    def lda(self, imageset, k):
+        model = LatentDirichletAllocation(n_components=k, random_state=0)
+        scaler = StandardScaler(with_mean=False, with_std=True).fit(imageset)
+        imageset = scaler.transform(imageset)
+        W = model.fit_transform(imageset)
+        H = model.components_
+        return W, H
+
     # Function to perform PCA
     def pca(self, imageset, k):
         dtd = np.cov(imageset.T)
@@ -144,16 +154,34 @@ class dimReduction(imageProcess):
             feat_ls.append([(features[i], w.T[idx][i]) for i in x])
         return img_sort, feat_ls
 
+    def normalize(self, imgs):
+        temp = np.array([[1/math.exp(t) for t in (x[1])] for x in imgs])
+        return temp
+    def hist(self, imgs):
+        mean = np.array([[x[1][t] for t in range(3)] for x in imgs])
+        sd = np.array([[x[1][t] for t in range(3, 6)] for x in imgs])
+        sk = np.array([[x[1][t] for t in range(6, 10)] for x in imgs])
+        (m_histogram, m_bin_edges) = np.histogram(mean.ravel(), bins=10)
+        (sd_histogram, sd_bin_edges) = np.histogram(sd.ravel(), bins=10)
+        (sk_histogram, sk_bin_edges) = np.histogram(sk.ravel(), bins=10)
+        return np.array([np.array(m_histogram), np.array(sd_histogram), np.array(sk_histogram)])
+
     # Function to save the reduced dimensions to database
     def saveDim(self, feature, model, dbase, k, password='1Idontunderstand',
                 host='localhost', database='postgres',
-                user='postgres', port=5432, meta=False):
+                user='postgres', port=5432, meta=False, negative_handle ='n'):
 
         db = PostgresDB(password=password, host=host,
                         database=database, user=user, port=port)
         conn = db.connect()
         imgs = self.dbProcess(password=password, process='f', model=feature)
-        imgs_data = np.array([x[1] for x in imgs])
+        if feature == 'm':
+            if negative_handle == 'h':
+                imgs_data = self.hist(imgs)
+            else:
+                imgs_data = self.normalize(imgs)
+        else:
+            imgs_data = np.array([x[1] for x in imgs])
         imgs_meta = [x[0] for x in imgs]
         imgs_zip = list(zip(imgs_meta, imgs_data))
         if meta == True:
