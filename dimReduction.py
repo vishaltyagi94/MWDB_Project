@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 from scipy.sparse.linalg import svds
 from sklearn import svm
+
 class dimReduction(imageProcess):
     def __init__(self, dirpath, ext='*.jpg'):
         super().__init__(dirpath=dirpath, ext=ext)
@@ -144,10 +145,12 @@ class dimReduction(imageProcess):
             feat_ls.append([(features[i], w.T[idx][i]) for i in x])
         return img_sort, feat_ls
 
+    
     # Function to save the reduced dimensions to database
     def saveDim(self, feature, model, dbase, k, password='1Idontunderstand',
                 host='localhost', database='postgres',
                 user='postgres', port=5432, meta=False):
+
 
         db = PostgresDB(password=password, host=host,
                         database=database, user=user, port=port)
@@ -156,9 +159,11 @@ class dimReduction(imageProcess):
         imgs_data = np.array([x[1] for x in imgs])
         imgs_meta = [x[0] for x in imgs]
         imgs_zip = list(zip(imgs_meta, imgs_data))
+
         if meta == True:
             self.createInsertMeta(conn)
             exit()
+            
         if model == 'nmf':
             w, h = self.nmf(imgs_data.T, k)
             imgs_red = np.dot(imgs_data, w).tolist()
@@ -179,6 +184,7 @@ class dimReduction(imageProcess):
         self.createInsertDB(dbase, imgs_red, conn)
         return imgs_sort, feature_sort
 
+      
     # Classify images based on label
     def classifyImg(self, conn, feature, img, label, dim):
         # fetch image dataset
@@ -238,3 +244,4 @@ class dimReduction(imageProcess):
         centroid = np.mean(imgs_red, axis=0)
         print('label distance from centroid:',sorted([self.l2Dist(centroid, i) for i in imgs_red], reverse=True))
         print('image:', self.l2Dist(centroid, image))
+
