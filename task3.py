@@ -15,20 +15,14 @@ feature = input('Please choose a feature model - SIFT(s), Moments(m), LBP(l), Hi
 if feature not in ('s', 'm', 'l', 'h'):
     print('Please enter a valid feature model!')
     exit()
-technique = input('Please choose a dimensionality reduction technique - PCA(pca), SVD(svd), NMF(nmf), LDA(lda)')
+technique = input('Please choose a dimensionality reduction technique - PCA(pca), SVD(svd), NMF(nmf), LDA(lda): ')
 k = input('Please provide the number of latent semantics(k): ')
 label = input("Which label do you want: ")
 db = 'imagedata_' + feature
 dim = dimReduction(path, '*.jpg')
-task3 = imageProcess("/home/anhnguyen/ASU/CSE-515/Project/Phase 2/Project - Phase 2/Data/testset1/")
+# task3 = imageProcess("/home/anhnguyen/ASU/CSE-515/Project/Phase 2/Project - Phase 2/Data/testset1/")
 # filterImage = task3.CSV(label)
-imgs_sort, feature_sort = dim.saveDim(feature, technique, db, int(k), password = "mynhandepg", database = "mwdb", label = label)
-# SVD = SVDProcess(k,featureDescriptor)
-# matrix_SVD, image_id = SVD.svd_latent(filterImage)
-# SVD.svdTask1(matrix_SVD,image_id)
-# similarity(feature, technique, db, int(k), label)
-# # imgs_sort, feature_sort = dim.saveDim(feature, technique, db, int(k))
-# phase1 = imageProcess("/home/anhnguyen/ASU/CSE-515/Project/Phase 2/Project - Phase 2/Data/testset1/")
+imgs_sort, feature_sort = dim.saveDim(feature, technique, db, int(k), password = "mynhandepg", database = "mwdb", label = label, meta = True)
 
 path = os.path.normpath(os.getcwd()  + os.sep + os.pardir + os.sep + 'Outputs'  +os.sep)
 print(path)

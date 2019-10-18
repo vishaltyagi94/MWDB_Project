@@ -6,14 +6,16 @@ from sklearn.decomposition import NMF
 from sklearn.preprocessing import StandardScaler
 import numpy as np
 from scipy.sparse.linalg import svds
-from sklearn.cluster import MiniBatchKMeans
+from sklearn.decomposition import TruncatedSVD
+# from sklearn.cluster import MiniBatchKMeans
 from sklearn.decomposition import PCA
+from sklearn.decomposition import LatentDirichletAllocation
 import joblib
 from sklearn.cluster import KMeans
 import os
 
 
-
+no_clusters = 300
 
 class KMeans_SIFT:
     def __init__(self,k):
@@ -24,7 +26,7 @@ class KMeans_SIFT:
         kmeans = KMeans(n_clusters=self.k, verbose=0).fit(matrix_image)
         return kmeans
 
-    def newMatrixSift(self,data, kmeans):
+    def newMatrixSift(self,data, kmeans, model):
         kmeans.verbose = False
         histo_list = []
         for des in data:
@@ -40,7 +42,10 @@ class KMeans_SIFT:
                     histo[idx] += 1/nkp # Because we need normalized histograms, I prefere to add 1/nkp directly
 
             histo_list.append(histo)
-        print(np.asarray(histo_list).shape)
+        # print(np.asarray(histo_list).shape)
+        path = os.path.normpath(os.getcwd()  + os.sep + os.pardir + os.sep + 'Models'  +os.sep)
+        with open(path + os.sep  + model +'.joblib', 'wb') as f1:
+            joblib.dump(kmeans, f1)
         return np.asarray(histo_list)
 
 
@@ -49,40 +54,62 @@ class dimReduction(imageProcess):
         super().__init__(dirpath=dirpath, ext=ext)
 
     # Function to fetch Reduced dimensions from image
-    def nmf(self, imageset, k):
+    def nmf(self, imageset, k , model_technique):
         model = NMF(n_components=k, init='random', random_state=0)
         scaler = StandardScaler(with_mean=False, with_std=True).fit(imageset)
         imageset= scaler.transform(imageset)
         W = model.fit_transform(imageset)
         H = model.components_
 
+        path = os.path.normpath(os.getcwd()  + os.sep + os.pardir + os.sep + 'Models'  +os.sep)
+
+        with open(path + os.sep  + model_technique +'.joblib', 'wb') as f1:
+            joblib.dump(model, f1)
+
         return W, H
+    
+    # Function to fetch Reduced dimensions from image
+    def lda(self, imageset, k, model_technique):
+        model = LatentDirichletAllocation(n_components=k, random_state=0)
+        scaler = StandardScaler(with_mean=False, with_std=True).fit(imageset)
+        imageset = scaler.transform(imageset)
+        W = model.fit_transform(imageset)
+        H = model.components_
+        path = os.path.normpath(os.getcwd()  + os.sep + os.pardir + os.sep + 'Models'  +os.sep)
+        with open(path + os.sep  + model_technique +'.joblib', 'wb') as f1:
+            joblib.dump(model, f1)
+
+        return W, H
+    
+    
     # Function to perform PCA
-    def pca(self, imageset, k,feature):
-        # dtd = np.cov(imageset.T)
-        # ddt = np.cov(imageset)
-        # u1,s1,v1 = svds(dtd, k)
-        # u2,s2,v2 = svds(ddt, k)
+    def pca(self, imageset, k, model):
         pca = PCA(n_components=k)
         data = pca.fit_transform(imageset)
         Sigma = np.diag(pca.explained_variance_)
         path = os.path.normpath(os.getcwd()  + os.sep + os.pardir + os.sep + 'Models'  +os.sep)
         
 
-        with open(path + os.sep  +'pca_'+ feature +'.joblib', 'wb') as f1:
+        with open(path + os.sep  + model +'.joblib', 'wb') as f1:
             joblib.dump(pca, f1)
 
         return data, np.dot(data,np.linalg.inv(Sigma)), pca.components_
         # return u1, v2
 
-    def svd(self,image, k):
-            U, s, Vt = svds(image, k)
-            # print(s.shape)
-            # Sigma = np.zeros((image.shape[0], image.shape[1]))
-            Sigma = np.diag(s)
-            # image = U[:,:self.k].dot(Sigma[:self.k, :self.k]).dot(V[:self.k,:])
-            # print(image.shape)
-            return U,Sigma,Vt
+    def svd(self,image, k, model):
+        # U, s, Vt = svds(image, k)
+        svd = TruncatedSVD(n_components=k)
+        data = svd.fit_transform(image)
+        # print(s.shape)
+        # Sigma = np.zeros((image.shape[0], image.shape[1]))
+        Sigma = np.diag(svd.singular_values_)
+        # image = U[:,:self.k].dot(Sigma[:self.k, :self.k]).dot(V[:self.k,:])
+        # print(image.shape)
+        path = os.path.normpath(os.getcwd()  + os.sep + os.pardir + os.sep + 'Models'  +os.sep)
+        
+        with open(path + os.sep  + model +'.joblib', 'wb') as f1:
+            joblib.dump(svd, f1)
+        return data, np.dot(data,np.linalg.inv(Sigma)) , svd.components_
 
     # Function to convert the List into string to insert into database
     def convString(self, lst):
@@ -93,10 +120,10 @@ class dimReduction(imageProcess):
     # Method to get the sorted list of image contributions to the Basis Vectors
     def imgSort(self, h, imgs_meta):
         h_sort = [np.argsort(x)[::-1] for x in h]
-        print(imgs_meta)
-        print(h_sort)
-        print(np.asarray(imgs_meta).shape)
-        print(np.asarray(h_sort).shape)
+        # print(imgs_meta)
+        # print(h_sort)
+        # print(np.asarray(imgs_meta).shape)
+        # print(np.asarray(h_sort).shape)
         img_sort = []
         for idx, hs in enumerate(h_sort):
             img_sort.append([(imgs_meta[x], h[idx][x]) for x in hs])
@@ -143,7 +170,7 @@ class dimReduction(imageProcess):
         conn.commit()
 
         for image in imgs_red:
-            print(image)
+            # print(image)
             sql = "SELECT {field} FROM {db} WHERE {field} = '{condition}';".format(field="imageid",db=dbname,condition=image[0])
             # print("SQL Check Exist - HOG: ", sql)
             cur.execute(sql)
@@ -167,28 +194,84 @@ class dimReduction(imageProcess):
         cur.close()
         print('Reduced Features saved successfully to Table {x}'.format(x=dbname))
 
+    def simMetric(self, d1, d2):
+        return 1 / (1 + self.l2Dist(d1, d2))
+
+    # Function to create subject id matrix
+    def subMatrix(self, conn, dbname, mat=True):
+        # Read from the database and join with Meta data
+        cur = conn.cursor()
+        sqlj = "SELECT t2.subjectid, ARRAY_AGG(t1.imageid), ARRAY_AGG(t1.imagedata) FROM {db} " \
+               "t1 INNER JOIN img_meta t2 ON t1.imageid = t2.image_id GROUP BY t2.subjectid".format(db=dbname)
+        cur.execute(sqlj)
+        subjects = cur.fetchall()
+        sub_dict = {x: np.mean(np.array(y,dtype=float), axis=0) for x,z,y in subjects}
+        sub_sim = {x:'' for x in sub_dict.keys()}
+        sub_mat = []
+        for x in sub_dict.keys():
+            sub_sim[x] = sorted([(el, self.simMetric(sub_dict[x], sub_dict[el])) for el in sub_dict.keys() if el != x], key=lambda x:x[1], reverse=True)[0:3]
+            sub_mat.append([self.simMetric(sub_dict[x], sub_dict[el]) for el in sub_dict.keys()])
+
+        if mat == False:
+            return sub_sim
+        else:
+            k = input('Please provide the number of latent semantics(k): ')
+            w, h = self.nmf(np.array(sub_mat), int(k))
+            img_sort = self.imgSort(h, list(sub_dict.keys()))
+        return np.array(img_sort)
+
+    def binMat(self, conn, dbname):
+        # Read from the database and join with Meta data
+        cur = conn.cursor()
+        sqlj = "SELECT t1.imageid, CASE WHEN t2.orient = 'left' THEN 1 ELSE 0 END , " \
+               "CASE WHEN t2.orient = 'right' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.aspect = 'dorsal' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.aspect = 'palmar' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.accessories = '1' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.accessories = '0' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.gender = 'male' THEN 1 ELSE 0 END ," \
+               "CASE WHEN t2.gender = 'female' THEN 1 ELSE 0 END" \
+               " FROM {db} " \
+               "t1 INNER JOIN img_meta t2 ON t1.imageid = t2.image_id".format(db=dbname)
+        cur.execute(sqlj)
+        subjects = cur.fetchall()
+        img_meta = []
+        bin_mat = []
+        for x in subjects:
+            img_meta.append(x[0])
+            bin_mat.append(x[1:])
+        k = input('Please provide the number of latent semantics(k): ')
+        w, h = self.nmf(np.array(bin_mat).T, int(k))
+        img_sort = self.imgSort(h, img_meta)
+        features = ['left', 'right', 'dorsal', 'palmar', 'acessories', 'no_accessories', 'male', 'female']
+        feature_sort = [np.argsort(x)[::-1] for x in w.T]
+        feat_ls = []
+        for idx, x in enumerate(feature_sort):
+            feat_ls.append([(features[i], w.T[idx][i]) for i in x])
+        return img_sort, feat_ls
     # Function to save the reduced dimensions to database
+
     def saveDim(self, feature, model, dbase, k, password='1Idontunderstand',
                 host='localhost', database='postgres',
-                user='postgres', port=5432, label=None):
+                user='postgres', port=5432, label=None, meta=False):
 
         imageDB = imageProcess(self.dirpath)
         imgs = imageDB.dbProcess(password=password, process='f', model=feature, dbase = dbase)
-        
+        kmeans_model = 'kmeans_' + str(no_clusters)
+        technique_model = feature + '_' + model
         if label is not None:
-            dbase += '_' + model + '_' + label
             filteredImage = imageDB.CSV(label)
+            label = label.replace(" ", "_")
+            dbase += '_' + model + '_' + label
+            kmeans_model += '_' + label
+            technique_model += '_' + label
         else:
             dbase += '_' + model
 
+        # print(technique_model)
         imgs_data = []
         imgs_meta = []
 
-        # print(feature)
-        # if label is not None:
-        #     index_array = np.asarray([i if x[0] in filteredImage for x in imgs])
-        #     imgs = imgs[index_array]
-        # print(filteredImage)
         i = -1
         while i < len(imgs)-1:
             # print (x[1].shape)
@@ -209,50 +292,63 @@ class dimReduction(imageProcess):
         
         
         imgs_data = np.asarray(imgs_data)
-        print(imgs_data.shape)
-        print(imgs_meta)
+        # print(imgs_data.shape)
+        # print(imgs_meta)
         # imgs_meta = [x[0] if x[0] in filteredImage for x in imgs]
         imgs_zip = list(zip(imgs_meta, imgs_data))
         db = PostgresDB(password=password, host=host,
                         database=database, user=user, port=port)
         conn = db.connect()
-        # if meta != None:
-        #     self.createInsertMeta(conn)
+        if meta:
+            imageDB.createInsertMeta(conn)
 
         model = model.lower()
 
         if feature == "s":
-            Kmeans = KMeans_SIFT(300)
+            if imgs_data.shape[0] < no_clusters:
+                Kmeans = KMeans_SIFT(imgs_data.shape[0] // 2)
+            else:
+                Kmeans = KMeans_SIFT(no_clusters)
             clusters = Kmeans.kmeans_process(imgs_data)
             # print (imgs_zip)
-            imgs_data = Kmeans.newMatrixSift(imgs, clusters)
+            imgs_data = Kmeans.newMatrixSift(imgs, clusters ,kmeans_model)
             imgs_zip = list(zip(imgs_meta, imgs_data))
 
         if model == 'nmf':
-            w, h = self.nmf(imgs_data.T, k)
-            imgs_red = np.dot(imgs_data, w).tolist()
-            imgs_sort = self.imgSort(h, imgs_meta)
-            feature_sort = self.imgFeatureSort(w.T, imgs_zip)
+            w, h = self.nmf(imgs_data, k, technique_model)
+            imgs_red = np.dot(imgs_data, h.T).tolist()
+            print(np.asarray(w).shape)
+            print(np.asarray(h).shape)
+            imgs_sort = self.imgSort(w.T, imgs_meta)
+            feature_sort = self.imgFeatureSort(h, imgs_zip)
+
+        elif model == 'lda':
+            w, h = self.lda(imgs_data, k, technique_model)
+            imgs_red = np.dot(imgs_data, h.T).tolist()
+            print(np.asarray(w).shape)
+            print(np.asarray(h).shape)
+            imgs_sort = self.imgSort(w.T, imgs_meta)
+            feature_sort = self.imgFeatureSort(h, imgs_zip)
 
         elif model == 'pca':
-            data, U, Vt = self.pca(imgs_data, k, feature)
+            data, U, Vt = self.pca(imgs_data, k, technique_model)
             imgs_red = data.tolist()
             # imgs_red = np.dot(imgs_data, u).tolist()
             # print(imgs_red.shape)
-            print(Vt.shape)
-            print(U.shape)
+            # print(Vt.shape)
+            # print(U.shape)
             # print(np.asarray(imgs_red).shape)
             imgs_sort = self.imgSort(U.T, imgs_meta)
             feature_sort = self.imgFeatureSort(Vt, imgs_zip)
 
         elif model == 'svd':
             # print(imgs_data.shape)
-            U,Sigma,Vt = self.svd(imgs_data, k)
+            data, U, Vt = self.svd(imgs_data, k, technique_model)
             # print(U.shape)
             # print(Sigma.shape)
             # print(Vt.shape)
             # imgs_red = np.dot(U, Sigma, Vt).tolist()
-            imgs_red = U.dot(Sigma).dot(Vt).tolist()
+            imgs_red = data.tolist()
             # print(im)
             # U[:,:self.k].dot(Sigma[:self.k, :self.k]).dot(V[:self.k,:])
             imgs_sort = self.imgSort(U.T, imgs_meta)
@@ -268,5 +364,8 @@ class dimReduction(imageProcess):
         # imgs_red = self.convString(imgs_red)
         # print(imgs_red[0])
         # Images ranked based on contribution to the Latent semantics
+        print (np.asarray(imgs_sort).shape)
+        # print(img_sort)
+        print (np.asarray(feature_sort).shape)
         self.createInsertDB(dbase, imgs_red, conn)
         return imgs_sort, feature_sort

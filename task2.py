@@ -3,35 +3,6 @@ from PostgresDB import PostgresDB
 import numpy as np
 from imageProcess import imageProcess
 
-def similarity (feature, technique, dbase, k, image):
-    db = PostgresDB(password = "mynhandepg", database = "mwdb")
-    conn = db.connect()
-    if conn is None:
-        print("Can not connect to database")
-        exit()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM " + dbase)
-    data = cursor.fetchall()
-    image_id = [rec[0] for rec in data]
-    image_index = image_id.index(image)
-    image_data = np.asarray(eval(data[image_index][1]))
-
-    task2 = imageProcess(path)
-    similarity = {} 
-    for i in range(len(image_id)):
-        image_cmp = np.asarray(eval(data[i][1]))
-        # if self.metrics:
-        #     # similarity[row[0]] = 1- self.cosine_similarity(image, result)
-        #     similarity[image_id[i]] = 1 - st.pearsonr(image,image_cmp)[0]
-        #     # similarity[row[0]] = mean_squared_error(image,result)
-        #     # similarity[row[0]] = 0 - self.psnr(image,result)
-        # else:
-        similarity[image_id[i]] = task2.euclidean_distance(image_data,image_cmp)
-    similarity = sorted(similarity.items(), key = lambda x : x[1], reverse=False)
-    task2.dispImages(similarity,feature, technique, 11, k)
-    
-        # print (image_cmp.shape)
-
 
 
 
