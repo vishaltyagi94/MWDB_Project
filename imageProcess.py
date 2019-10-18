@@ -461,7 +461,7 @@ class imageProcess:
             header = next(reader)
             i = header.index(index)
             id = header.index("imageName")
-            print(i,index)
+            # print(i,index)
             # list comprehension through remaining cr iterables
             if index in ("aspectOfHand", "gender"):
                 filteredImage = [row[id][:len(row[id]) - 4] for row in reader if row[i].find(label) != -1]
