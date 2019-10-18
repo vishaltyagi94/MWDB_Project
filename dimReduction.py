@@ -14,6 +14,7 @@ from sklearn.decomposition import LatentDirichletAllocation
 import joblib
 from sklearn.cluster import KMeans
 import os
+import math
 
 
 no_clusters = 300
@@ -55,7 +56,7 @@ class dimReduction(imageProcess):
         super().__init__(dirpath=dirpath, ext=ext)
 
     # Function to fetch Reduced dimensions from image
-    def nmf(self, imageset, k):
+    def nmf(self, imageset, k, model_technique):
         model = NMF(n_components=k, init='random', random_state=0)
         scaler = StandardScaler(with_mean=False, with_std=True).fit(imageset)
         imageset= scaler.transform(imageset)
@@ -179,11 +180,11 @@ class dimReduction(imageProcess):
             # cur.execute(sql)
             insert_value = str(np.asarray(image[1]).tolist())
             if cur.fetchone() is None:
-                print("Insert")
+                # print("Insert")
                 # print("Not Exist HOG - Insert")
                 sql2 = "INSERT INTO {db} VALUES('{x}', '{y}');".format(x=image[0],y=insert_value, db=dbname)
             else:
-                print("Update")
+                # print("Update")
                 # print("Exist HOG - Update")
                 # column = "HOG"
                 
@@ -252,17 +253,23 @@ class dimReduction(imageProcess):
         return img_sort, feat_ls
 
       
+    def normalize(self, imgs):
+        print(imgs)
+        temp = np.array([[1/math.exp(t) for t in x] for x in imgs])
+        return temp
+    def hist(self, imgs):
+        mean = np.array([[x[t] for t in range(3)] for x in imgs])
+        sd = np.array([[x[t] for t in range(3, 6)] for x in imgs])
+        sk = np.array([[x[t] for t in range(6, 10)] for x in imgs])
+        (m_histogram, m_bin_edges) = np.histogram(mean.ravel(), bins=10)
+        (sd_histogram, sd_bin_edges) = np.histogram(sd.ravel(), bins=10)
+        (sk_histogram, sk_bin_edges) = np.histogram(sk.ravel(), bins=10)
+        return np.array([np.array(m_histogram), np.array(sd_histogram), np.array(sk_histogram)])
+
     # Classify images based on label
     def classifyImg(self, conn, feature, img, label, dim):
         # fetch image dataset
-        if feature == 'm':
-            db_feature = 'imagedata_moments'
-        elif feature == 's':
-            db_feature = 'imagedata_sift'
-        elif feature == 'h':
-            db_feature = 'imagedata_hog'
-        elif feature == 'l':
-            db_feature = 'imagedata_lbp'
+        db_feature = 'imagedata_' + feature
 
         # Fetch the data for a particular label
         if label in ['left', 'right']:
@@ -316,12 +323,14 @@ class dimReduction(imageProcess):
 
     def saveDim(self, feature, model, dbase, k, password='1Idontunderstand',
                 host='localhost', database='postgres',
-                user='postgres', port=5432, label=None, meta=False):
+                user='postgres', port=5432, label=None, meta=False, negative_handle ='n'):
 
         imageDB = imageProcess(self.dirpath)
         imgs = imageDB.dbProcess(password=password, process='f', model=feature, dbase = dbase)
         kmeans_model = 'kmeans_' + str(no_clusters)
         technique_model = feature + '_' + model
+        
+        
         if label is not None:
             filteredImage = imageDB.CSV(label)
             label = label.replace(" ", "_")
@@ -353,6 +362,12 @@ class dimReduction(imageProcess):
             # print(i)
             # print(len(imgs))
         
+        #Handle Negative Value of NMF
+        if feature == 'm':
+            if negative_handle == 'h':
+                imgs_data = self.hist(imgs_data)
+            else:
+                imgs_data = self.normalize(imgs_data)
         
         imgs_data = np.asarray(imgs_data)
         # print(imgs_data.shape)
@@ -396,21 +411,12 @@ class dimReduction(imageProcess):
         elif model == 'pca':
             data, U, Vt = self.pca(imgs_data, k, technique_model)
             imgs_red = data.tolist()
-            # imgs_red = np.dot(imgs_data, u).tolist()
-            # print(imgs_red.shape)
-            # print(Vt.shape)
-            # print(U.shape)
-            # print(np.asarray(imgs_red).shape)
             imgs_sort = self.imgSort(U.T, imgs_meta)
             feature_sort = self.imgFeatureSort(Vt, imgs_zip)
 
         elif model == 'svd':
             # print(imgs_data.shape)
             data, U, Vt = self.svd(imgs_data, k, technique_model)
-            # print(U.shape)
-            # print(Sigma.shape)
-            # print(Vt.shape)
-            # imgs_red = np.dot(U, Sigma, Vt).tolist()
             imgs_red = data.tolist()
             # print(im)
             # U[:,:self.k].dot(Sigma[:self.k, :self.k]).dot(V[:self.k,:])
@@ -423,12 +429,8 @@ class dimReduction(imageProcess):
         # print(feature_sort)
         # Process the reduced Images
         imgs_red = list(zip(imgs_meta, imgs_red))
-        # print(imgs_red[0])
-        # imgs_red = self.convString(imgs_red)
-        # print(imgs_red[0])
-        # Images ranked based on contribution to the Latent semantics
-        print (np.asarray(imgs_sort).shape)
+        # print (np.asarray(imgs_sort).shape)
         # print(img_sort)
-        print (np.asarray(feature_sort).shape)
+        # print (np.asarray(feature_sort).shape)
         self.createInsertDB(dbase, imgs_red, conn)
         return imgs_sort, feature_sort

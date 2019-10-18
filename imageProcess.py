@@ -461,7 +461,7 @@ class imageProcess:
             header = next(reader)
             i = header.index(index)
             id = header.index("imageName")
-            print(i,index)
+            # print(i,index)
             # list comprehension through remaining cr iterables
             if index in ("aspectOfHand", "gender"):
                 filteredImage = [row[id][:len(row[id]) - 4] for row in reader if row[i].find(label) != -1]
@@ -469,19 +469,8 @@ class imageProcess:
                 filteredImage = [row[id][:len(row[id]) - 4] for row in reader if int(row[i]) == 0]
             elif label == "without accessories":
                 filteredImage = [row[id][:len(row[id]) - 4] for row in reader if int(row[i]) == 1]
-            else:
-                # filteredImage = []
-                # i = header.index("aspectOfHand")
-                # filteredImage.append([row[id][:len(row[id]) - 4] for row in reader if row[i].find("left") != -1]
-                # filteredImage.append([row[id][:len(row[id]) - 4] for row in reader if row[i].find("right") != -1]
-                # filteredImage.append([row[id][:len(row[id]) - 4] for row in reader if row[i].find("dorsal") != -1]
-                # filteredImage.append([row[id][:len(row[id]) - 4] for row in reader if row[i].find("palmar") != -1]
-                # i =  header.index("gender")
-                # filteredImage.append([row[id][:len(row[id]) - 4] for row in reader if row[i].find("male") != -1]
-                # filteredImage.append([row[id][:len(row[id]) - 4] for row in reader if row[i].find("female") != -1]
-                # filteredImage.append([row[id][:len(row[id]) - 4] for row in reader if row[i].find("male") != -1]
-                # filteredImage.append([row[id][:len(row[id]) - 4] for row in reader if row[i].find("female") != -1]
-                return data, header
+            # else:
+            #     return data, header
         # print (filteredImage)
         return filteredImage
 
@@ -492,87 +481,3 @@ def cosine_similarity(imageA, imageB):
         # print(imageB)
         return np.dot(imageA, imageB)/(np.sqrt(np.sum(imageA ** 2, axis=0))*np.sqrt(np.sum(imageB ** 2, axis=0)))
 
-
-# phase1 = imageProcess("/home/anhnguyen/ASU/CSE-515/Project/Phase 2/Project - Phase 2/Data/testset1/")
-# phase1.dbProcess(password = "mynhandepg", model = "l", process = "s")
-# arg = input("Which task would you like to run (1/2/3)? ")
-
-# featureDescriptor = input("Which feature do you want to compute - LBP or HOG: ")
-# try:
-#         k=int(input("K is: "))
-# except ValueError:
-#         print("Not an integer")
-#         exit()
-# if (featureDescriptor.upper() != "LBP" and featureDescriptor.upper() != "HOG" and featureDescriptor.upper() != "COLOR" and featureDescriptor.upper() != "SIFT"):
-#         print("Your feature descriptor is not correct")
-
-# technique = input("Which reduction techinique: ")
-
-# if arg == '1':
-#     SVD = SVDProcess(k,featureDescriptor)
-#     matrix_SVD, image_id = SVD.svd_latent()
-#     SVD.svdTask1(matrix_SVD,image_id)
-
-# elif arg == '2':
-#     image = input("Insert the name of your image: ")
-#     try:     
-#         similarityMetric = bool(int(input("Which similarity metric do you want to use - Cosine Similarity or Euclidean Distance (1/0): ")))
-#     except ValueError:
-#         print("Not a bool value")
-#         exit()
-    
-#             # imClass.processImage(image,featureDescriptor,no_images,similarityMetric)
-#     SVD = SVDProcess(k,featureDescriptor,similarityMetric)
-#     matrix_image, image_id = SVD.svd_latent()
-#     SVD.svd_sim(image, no_images, matrix_image, image_id)
-
-# elif arg == '3':
-#     label = input("Which label do you want: ")
-#     filterImage = CSV(label)
-#     SVD = SVDProcess(k,featureDescriptor)
-#     matrix_SVD, image_id = SVD.svd_latent(filterImage)
-#     SVD.svdTask1(matrix_SVD,image_id)
-# elif arg == '4':
-#     label = input("Which label do you want: ")
-#     image = input("Insert the name of your image: ")
-#     try:
-#         no_images=int(input("How many similar images do you want to return: "))
-#     except ValueError:
-#         print("Not an integer")
-#         exit()
-#     try:     
-#         similarityMetric = bool(int(input("Which similarity metric do you want to use - Cosine Similarity or Euclidean Distance (1/0): ")))
-#     except ValueError:
-#         print("Not a bool value")
-#         exit()
-        
-#     filterImage = CSV(label)
-#     SVD = SVDProcess(k,featureDescriptor)
-#     matrix_image, image_id = SVD.svd_latent(filterImage)
-#     SVD.svd_sim(image, no_images, matrix_image, image_id)
-# else:
-#     SVD = SVDProcess(k,featureDescriptor)
-#     matrix = SVD.svd_latent()
-#     obj_list = []
-#     x_axis = []
-#     for i in range(20,210,20):
-#         print("Number of cluster: " + str(i))
-#         # kmeans = KMeans(k=i, max_iter = 50)
-#         # centroids, clusters = kmeans.fit(matrix)
-#         # objective = kmeans.objective_func(matrix, centroids, clusters)
-#         # Append to objective function list
-#         Kmeans = KMeans_SIFT(i)
-#         clusters, score = Kmeans.kmeans_process(matrix)
-#         obj_list.append(-score)
-#         # Create x axis
-#         x_axis.append(i)
-    
-#     plt.plot(x_axis, obj_list)
-#     plt.xlabel('Number of Clusters')
-#     plt.ylabel('Objective Function Value')
-#     #plt.savefig('graph.png')
-#     plt.title('SIFT and Kmeans Error')
-#     plt.show()
-
-#https://stackoverflow.com/questions/28836781/reading-column-names-alone-in-a-csv-file
-#https://stackoverflow.com/questions/19775692/use-and-meaning-of-in-in-an-if-statement
