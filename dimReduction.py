@@ -255,14 +255,7 @@ class dimReduction(imageProcess):
     # Classify images based on label
     def classifyImg(self, conn, feature, img, label, dim):
         # fetch image dataset
-        if feature == 'm':
-            db_feature = 'imagedata_moments'
-        elif feature == 's':
-            db_feature = 'imagedata_sift'
-        elif feature == 'h':
-            db_feature = 'imagedata_hog'
-        elif feature == 'l':
-            db_feature = 'imagedata_lbp'
+        db_feature = 'imagedata_' + feature
 
         # Fetch the data for a particular label
         if label in ['left', 'right']:
@@ -396,21 +389,12 @@ class dimReduction(imageProcess):
         elif model == 'pca':
             data, U, Vt = self.pca(imgs_data, k, technique_model)
             imgs_red = data.tolist()
-            # imgs_red = np.dot(imgs_data, u).tolist()
-            # print(imgs_red.shape)
-            # print(Vt.shape)
-            # print(U.shape)
-            # print(np.asarray(imgs_red).shape)
             imgs_sort = self.imgSort(U.T, imgs_meta)
             feature_sort = self.imgFeatureSort(Vt, imgs_zip)
 
         elif model == 'svd':
             # print(imgs_data.shape)
             data, U, Vt = self.svd(imgs_data, k, technique_model)
-            # print(U.shape)
-            # print(Sigma.shape)
-            # print(Vt.shape)
-            # imgs_red = np.dot(U, Sigma, Vt).tolist()
             imgs_red = data.tolist()
             # print(im)
             # U[:,:self.k].dot(Sigma[:self.k, :self.k]).dot(V[:self.k,:])
@@ -423,12 +407,8 @@ class dimReduction(imageProcess):
         # print(feature_sort)
         # Process the reduced Images
         imgs_red = list(zip(imgs_meta, imgs_red))
-        # print(imgs_red[0])
-        # imgs_red = self.convString(imgs_red)
-        # print(imgs_red[0])
-        # Images ranked based on contribution to the Latent semantics
-        print (np.asarray(imgs_sort).shape)
+        # print (np.asarray(imgs_sort).shape)
         # print(img_sort)
-        print (np.asarray(feature_sort).shape)
+        # print (np.asarray(feature_sort).shape)
         self.createInsertDB(dbase, imgs_red, conn)
         return imgs_sort, feature_sort
